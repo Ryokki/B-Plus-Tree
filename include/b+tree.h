@@ -145,7 +145,7 @@ private:
 namespace BPlusTree {
 
 template <class key_type, class val_type>
-class Node 
+class Node  
 {
 public:
   Node() {
@@ -153,16 +153,19 @@ public:
     prev_leaf = nullptr;
   };
 
-  vector <key_type> keys;
+  vector <key_type> keys; 
   vector <val_type> vals;
-  vector <Node<key_type,val_type>*> nodes;
+
+  vector <Node<key_type,val_type>*> nodes;  // 对于中间node，有指向下一层的nodes
+  // 对于叶子，是双向链表
   class Node <key_type, val_type>*next_leaf;
   class Node <key_type, val_type>*prev_leaf;
 
 };
 
 
-template <class key_type, class val_type, size_t max_children = 3>
+// M阶，node里最大size=M-1，最大孩子数=M
+template <class key_type, class val_type, size_t max_children = 3>  
 class Tree
 {
 
@@ -370,9 +373,9 @@ public:
 
 Tree() {
 
-  if (max_children < 3) throw std::runtime_error("B+Tree - max_degree must > 3");
-  this->max_degree = max_children;
-  root = new Node<key_type, val_type>;
+  if (max_children < 3) throw std::runtime_error("B+Tree - max_degree must > 3"); // validation
+  this->max_degree = max_children; 
+  root = new Node<key_type, val_type>;  
   num_elements = 0;
 }
 
@@ -382,8 +385,22 @@ Tree() {
   delete root;
 }
 
+// 在这个树里面插入key-value
 void insert(const key_type &key,  val_type val) {
+  /** insert
+   * 1.找到要插入的叶子结点n
+   * 2.如果叶子结点中key存在了，那么直接修改value，然后return;   如果key不存在，那么继续走到3
+   * 3.num_elements++     (num_elements表示这颗树中存的key-value的数量)
+   * 4.将这个key-value插入到keys和vals数组中
+   * 5.插入后检查size，如果size==M，表明要分裂了，分裂的过程在split单独说
+   * 
+   */ 
 
+  /** split:分裂的做法是将
+   * 1.
+   * 2.
+   * 3.
+   */ 
   size_t i, j, traverse_index;
   key_type median_key;
   vector <size_t> traverse_indices;
@@ -404,29 +421,43 @@ void insert(const key_type &key,  val_type val) {
   
   /* find the leaf node */
   while (1) {
-
-    for (i = 0; i < n->keys.size(); i++) {
-      if (key < n->keys[i]) break;
+    /**
+     * 一般B+树应该是这样，从左到右是增加的  (所以我们从左到右查，如果<=的话，那么就是)
+     *     1,       12       33
+     * <=1     <=12    <=33     >33
+     * 看起来这个数据库是这样
+     *     1,       12       33
+     * <1     <12    <33     >=33
+     */ 
+    for (i = 0; i < n->keys.size(); i++) {  // 遍历所有子节点
+      if (key < n->keys[i]) break;  
     }
+    // 如果>=最右边的key，那么i=keys.size(),是最后一个子节点，因而是正确的
+    // 此时node[i]即为子节点
+
+    // 这个B+树的设计是，node.size()=0表示到了叶子结点，所以不需要判断node是否为空了
     if (n->nodes.size() != 0) {
       traverse_indices.push_back(i);
       parents.push_back(n);
       n = n->nodes[i];
-    } else break;
-
+    } else break; // n的size为0，表示这个node是叶子结点了，ok就找到啦
   }
+  // 这个while是正确的，成功找到了叶子结点n
+
 
   /* key exists */
-  for (j = 0; j < n->keys.size(); j++) {
+  // 如果key存在了，那么就直接修改对应的value，return
+  for (j = 0; j < n->keys.size(); j++) {  
     if (n->keys[j] == key) {
       n->vals[j] = val;
       return;
     }
   }
-  
+
 
   num_elements++;
   /* put the val and key in the proper postion */
+  // 这个地方是有问题的，B+树的叶子结点应该是有序的。但是由于前面查询也不是二分，所以错是没有错的，只是不符合B+树的定义
   n->keys.insert(n->keys.begin() + i, key);
   n->vals.insert(n->vals.begin() + i, val);
  
@@ -814,9 +845,12 @@ bool contains(const key_type &k) {
 
 size_t size() const { return num_elements; };
 bool empty() const { return (num_elements == 0); };
+
+// 删除了所有的node
 void clear() {
+  // 我猜这里就是递归删除子节点，然后删除自己
   recursive_clear_tree(root);
-  root = new Node<key_type, val_type>;
+  root = new Node<key_type, val_type>; 
   num_elements = 0;
 }
 
@@ -994,16 +1028,17 @@ iterator end() const {
 
 
 private:
-  size_t num_elements;
-  Node<key_type, val_type>*root;
-  size_t max_degree;
+  size_t num_elements;  // 这颗树中存的key-value的数量
+  Node<key_type, val_type>*root;  // Tree Root
+  size_t max_degree;  // M
 
+// 这个函数所做的就是递归删除这个node的所有子节点
 void recursive_clear_tree(const Node<key_type, val_type> *n) {
   size_t i;
-  for (i = 0; i < n->nodes.size(); i++) {
-    recursive_clear_tree(n->nodes[i]);
+  for (i = 0; i < n->nodes.size(); i++) { // node是指向下一层的node，即孩子节点
+    recursive_clear_tree(n->nodes[i]);  // 递归
   }
-  delete n;
+  delete n; // 删除自己
 }
 
 

@@ -2,6 +2,7 @@
 #include <string>
 #include <sstream>
 #include <fstream>
+#include <cstring>
 #include "b+tree.h"
 using namespace BPlusTree;
 using namespace std;

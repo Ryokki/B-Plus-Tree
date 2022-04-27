@@ -153,13 +153,13 @@ public:
     prev_leaf = nullptr;
   };
 
-  vector <key_type> keys; 
+  vector <key_type> keys;  
   vector <val_type> vals;
 
   vector <Node<key_type,val_type>*> nodes;  // 对于中间node，有指向下一层的nodes
   // 对于叶子，是双向链表
   class Node <key_type, val_type>*next_leaf;
-  class Node <key_type, val_type>*prev_leaf;
+  class Node <key_type, val_type>*prev_leaf;  
 
 };
 
@@ -393,23 +393,22 @@ void insert(const key_type &key,  val_type val) {
    * 3.num_elements++     (num_elements表示这颗树中存的key-value的数量)
    * 4.将这个key-value插入到keys和vals数组中
    * 5.插入后检查size，如果size==M，表明要分裂了，分裂的过程在split单独说
-   * 
    */ 
 
-  /** split:分裂的做法是将
-   * 1.
-   * 2.
-   * 3.
+  /** split:分裂的做法是一个递归的分裂，每当这个node满了就会分裂，并可能递归导致parent分裂
+   * 1.inner node: L split to L and L2, MOVE L2 to parent
+   * 2.leaf node: L split to L and L2, COPY L2 to parent
+   * 3.root node: when root node need to split , need to new a root
    */ 
   size_t i, j, traverse_index;
   key_type median_key;
-  vector <size_t> traverse_indices;
-  vector <Node<key_type, val_type>*> parents;
+  vector <size_t> traverse_indices; // record the index of  node in search path
+  vector <Node<key_type, val_type>*> parents; // record the node in search path
 
   Node<key_type, val_type>*right;
-  Node<key_type, val_type>*n = root; 
+  Node<key_type, val_type>*n = root;  
   Node<key_type, val_type>*parent;
-  bool records = true;
+  bool records = true;  // means isLeafNode
 
 
   // it = find(key);
@@ -421,67 +420,59 @@ void insert(const key_type &key,  val_type val) {
   
   /* find the leaf node */
   while (1) {
-    /**
-     * 一般B+树应该是这样，从左到右是增加的  (所以我们从左到右查，如果<=的话，那么就是)
-     *     1,       12       33
-     * <=1     <=12    <=33     >33
-     * 看起来这个数据库是这样
-     *     1,       12       33
-     * <1     <12    <33     >=33
-     */ 
-    for (i = 0; i < n->keys.size(); i++) {  // 遍历所有子节点
+    /* 找到应该遍历的子节点node[i] */
+    for (i = 0; i < n->keys.size(); i++) {
       if (key < n->keys[i]) break;  
     }
-    // 如果>=最右边的key，那么i=keys.size(),是最后一个子节点，因而是正确的
-    // 此时node[i]即为子节点
-
-    // 这个B+树的设计是，node.size()=0表示到了叶子结点，所以不需要判断node是否为空了
-    if (n->nodes.size() != 0) {
-      traverse_indices.push_back(i);
-      parents.push_back(n);
+    /* 记录路径中的各个parent，并判断为叶子节点时终止，更新n */
+    if (n->nodes.size() != 0) {  // 如果n不是叶子节点才会去记录
+      traverse_indices.push_back(i);  // 记录遍历路径中node的下标
+      parents.push_back(n);   // 记录遍历路径中的node
       n = n->nodes[i];
     } else break; // n的size为0，表示这个node是叶子结点了，ok就找到啦
-  }
-  // 这个while是正确的，成功找到了叶子结点n
-
+  } 
 
   /* key exists */
-  // 如果key存在了，那么就直接修改对应的value，return
   for (j = 0; j < n->keys.size(); j++) {  
-    if (n->keys[j] == key) {
+    if (n->keys[j] == key) { // 如果key存在了，那么就直接修改对应的value，return
       n->vals[j] = val;
       return;
     }
   }
 
-
+  /* key not exists */
   num_elements++;
   /* put the val and key in the proper postion */
-  // 这个地方是有问题的，B+树的叶子结点应该是有序的。但是由于前面查询也不是二分，所以错是没有错的，只是不符合B+树的定义
+  // 这个地方挺巧妙的，这里在i的位置插入是因为前面最后一次while循环中，i遍历了keys,使得keys[i-1]<key<keys[i]，所以在i的位置插入
   n->keys.insert(n->keys.begin() + i, key);
   n->vals.insert(n->vals.begin() + i, val);
  
-
   /* split the node until the bucket(key) is not full any more */
-  while (n->keys.size() == max_degree) {
-    median_key = n->keys[max_degree / 2];
-
+  while (n->keys.size() == max_degree) {  // 如果节点n满了
+    median_key = n->keys[max_degree / 2]; // 中间节点
     
     /* no matter weather we split the internal node or root node 
        We need the "right" node. When we split the nodes that contain records, the median was kept. 
        Otherwise, the median was deleted. 
-
     */
     right = new Node<key_type, val_type>;
-    if (records) j = max_degree / 2;
-    else j = max_degree / 2 + 1;
-    
+    // j表示right的第一个key index 
+    if (records) {  // 如果是叶子节点,是median index是right的第一个元素，
+     j = max_degree / 2;  
+    } else {
+      j = max_degree / 2 + 1; // 对于中间节点是median+1,因为第一个元素是MOVE到上层，舍弃
+    }
+
+    /* move half key-value to right */
     for (i = j; i < max_degree; i++) {
-      if (records) right->vals.push_back(n->vals[i]);
+      if (records) {  // 叶子节点才需要vals
+        right->vals.push_back(n->vals[i]);
+      }
       right->keys.push_back(n->keys[i]);
     }
-     
-
+    
+    // 对于中间节点,nodes.size() = M+1,所以i的起始为(M+1+1)/2 = M/2 + 1，因为L1的node是[0,M/2]
+    // 对于叶子节点,nodes.size() = 0,不会执行for循环里面的
     for (i = (n->nodes.size() + 1) / 2; i < n->nodes.size(); i++) {
       right->nodes.push_back(n->nodes[i]);
     }
@@ -489,51 +480,66 @@ void insert(const key_type &key,  val_type val) {
      // when we split the root node, create the new parent node.
      //   The original node became the "left" node.
     
-    if (traverse_indices.size() == 0) {
+    if (traverse_indices.size() == 0) { // no parent, means spliting root
 
-
+      /* parent is created as new root*/
+      // parent only have one key, is right key's first ,just is median_key 
       parent = new Node<key_type, val_type>;
-
       parent->nodes.push_back(n);
       parent->nodes.push_back(right);
       parent->keys.push_back(median_key);
       
-      /* connect the leaf nodes */
-    
+      /* connect nodes */
+      // ??? 不是只有叶子才去链表吗 ???
+
+      // pre: a <-> n <-> b
+      // now: a <-> n <-> right <-> b
       right->next_leaf = n->next_leaf;
-      if (n->next_leaf != nullptr) n->next_leaf->prev_leaf = right;
+      if (n->next_leaf != nullptr) { 
+        n->next_leaf->prev_leaf = right;
+      }
       n->next_leaf = right;
       right->prev_leaf = n;
 
       
 
-     
-      root = parent;
-      n->keys.resize(max_degree / 2);
-      if (records) n->vals.resize(max_degree / 2);
+      
+      root = parent;  //update root
 
-      if (n->nodes.size() != 0) n->nodes.resize((n->nodes.size() + 1)/ 2);
+      /* resize */
+      n->keys.resize(max_degree / 2);
+      if (records) {
+        n->vals.resize(max_degree / 2);
+      }
+      if (n->nodes.size() != 0) {
+        n->nodes.resize((n->nodes.size() + 1)/ 2);  
+      }
       // cout << "size: " << parent->nodes.size() << " " << n->nodes.size() << " " << right->nodes.size() << endl;
 
 
-    } else {
+    } else {  // the split node is not root
 
       /* when we split the internal node, the original node keeps the half capacity as the left node.
          Also, the median key was added to it's parent.
        */
       
-      if(records) n->vals.resize(max_degree/2);
+      if(records) {
+        n->vals.resize(max_degree/2);
+      }
       n->keys.resize(max_degree/2);
 
-      if (n->nodes.size() != 0) n->nodes.resize((n->nodes.size() + 1) / 2); // inrernal node
+      if (n->nodes.size() != 0) {
+        n->nodes.resize((n->nodes.size() + 1) / 2); // internal node
+      }
 
-      /* connect the leaf nodes */
+      /* connect the split nodes */
       right->next_leaf = n->next_leaf;
       if (n->next_leaf != nullptr) n->next_leaf->prev_leaf = right;
       n->next_leaf = right;
       right->prev_leaf = n;
       
-      parent = parents[parents.size() - 1];
+      /* get parent by path*/
+      parent = parents[parents.size() - 1]; 
       parents.pop_back();
 
       traverse_index = traverse_indices[traverse_indices.size() - 1];
